@@ -1,0 +1,577 @@
+\documentclass[]{article}
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\usepackage{fixltx2e} % provides \textsubscript
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+\else % if luatex or xelatex
+  \ifxetex
+    \usepackage{mathspec}
+  \else
+    \usepackage{fontspec}
+  \fi
+  \defaultfontfeatures{Ligatures=TeX,Scale=MatchLowercase}
+\fi
+% use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+% use microtype if available
+\IfFileExists{microtype.sty}{%
+\usepackage{microtype}
+\UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\hypersetup{unicode=true,
+            pdftitle={Climate-projected distributional shifts and refugia for North American ecoregions},
+            pdfauthor={Diana Stralberg (diana.stralberg@ualberta.ca), AdaptWest Project},
+            pdfborder={0 0 0},
+            breaklinks=true}
+\urlstyle{same}  % don't use monospace font for urls
+\usepackage{longtable,booktabs}
+\usepackage{graphicx,grffile}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+\IfFileExists{parskip.sty}{%
+\usepackage{parskip}
+}{% else
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+}
+\setlength{\emergencystretch}{3em}  % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{0}
+% Redefines (sub)paragraphs to behave more like sections
+\ifx\paragraph\undefined\else
+\let\oldparagraph\paragraph
+\renewcommand{\paragraph}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+\let\oldsubparagraph\subparagraph
+\renewcommand{\subparagraph}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+
+%%% Use protect on footnotes to avoid problems with footnotes in titles
+\let\rmarkdownfootnote\footnote%
+\def\footnote{\protect\rmarkdownfootnote}
+
+%%% Change title format to be more compact
+\usepackage{titling}
+
+% Create subtitle command for use in maketitle
+\newcommand{\subtitle}[1]{
+  \posttitle{
+    \begin{center}\large#1\end{center}
+    }
+}
+
+\setlength{\droptitle}{-2em}
+  \title{Climate-projected distributional shifts and refugia for North American
+ecoregions}
+  \pretitle{\vspace{\droptitle}\centering\huge}
+  \posttitle{\par}
+  \author{Diana Stralberg
+(\href{mailto:diana.stralberg@ualberta.ca}{\nolinkurl{diana.stralberg@ualberta.ca}}),
+AdaptWest Project}
+  \preauthor{\centering\large\emph}
+  \postauthor{\par}
+  \date{}
+  \predate{}\postdate{}
+
+
+\begin{document}
+\maketitle
+
+Climate model projections suggest major North American biome shifts in
+response to anthropogenic climate change (Rehfeldt et al. 2012). Such
+shifts could have profound influences on native flora and fauna, many of
+which would have to move long distances to track their climatic niches.
+To evaluate potential ecosystem changes at a somewhat finer scale, I
+projected the change in climate space for level III ecoregions
+(Commission for Environmental Cooperation 1997) as surrogates for
+multiple associated species and ecological communities. First, I
+developed a random forest model (Breiman 2001) to predict ecoregion
+class from bioclimatic variables. I used 10-km interpolated climate data
+for the 1971-2000 normal period, available from Natural Resources Canada
+(McKenney et al. 2011)
+
+R Code for this portion follows:
+
+\begin{verbatim}
+library(randomForest)
+library(raster)
+
+#eco = project directory
+#datLL = data frame of lat-lon sample points for which to extract climate variables ("CECEcoregionSampleLL.csv"")
+#cececo = data frame with ecoregion names ("CECecoregions.csv")
+#ecolevel3r = ecoregion raster with a Lambert azimuthal equal-area projection ("ceclev3idlaz.tif")
+#ecolevel3s = ecoregion shapefile with a Lambert azimuthal equal-area projection ("NA_CEC_Eco_Level3_lazea.shp")
+lazea <-  CRS("+proj=laea +lat_0=45 +lon_0=-100 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
+
+#cur = directory containing grids representing derived climate variables
+setwd(cur)
+clim <- list.files(cur, pattern =".asc$")
+curclim<-stack(clim)
+
+temp <- raster(clim[1])
+ID <- as.data.frame(rasterToPoints(temp))
+names(ID)[3] <- "ID4km"
+ID$ID <- row.names(ID)
+IDR <- raster(ncols=ncol(temp), nrows=nrow(temp), xmn=xmin(temp), xmx=xmax(temp), ymn=ymin(temp), ymx=ymax(temp))
+IDRR <- rasterize(as.matrix(ID[,1:2]), IDR, as.numeric(ID[,4]))
+
+curclim <- addLayer(curclim,IDRR)
+
+sampleclim<-cbind(datLL,extract(curclim,as.matrix(cbind(datLL[,3],datLL[,4]))))
+sc <- na.omit(sampleclim)
+names(sc)[ncol(sc)] <- "IDgrid"
+sc$NA_L3CODE <- as.factor(as.character(sc$NA_L3CODE))
+lu <- as.data.frame(levels(sc$NA_L3CODE))
+lu$level <- row.names(lu)
+names(lu)[1] <- "NA_L3CODE"
+
+setwd(eco)
+eco.rf <- randomForest(y=sc$NA_L3CODE, x=sc[,5:(ncol(sc)-1)],importance = TRUE, proximity = TRUE, data=sc)
+eco1.rf <- randomForest(y=sc$NA_L3CODE, x=sc[,5:23],importance = TRUE, proximity = TRUE, data=sc)
+round(importance(eco1.rf), 2)
+varImpPlot(eco1.rf) 
+ecocurr <- predict(curclim,eco1.rf)
+ecocurrlaz <- round(projectRaster(ecocurr, ecolevel3r, method='ngb'),0)
+writeRaster(ecocurrlaz,filename="current1_lazea.tif",datatype='INT4S',format="GTiff",overwrite=TRUE)
+curfreq <- freq(ecocurrlaz)
+ecolu <- merge(lu,curfreq,by.x="level",by.y="value")
+names(ecolu)[3] <- "curr"
+\end{verbatim}
+
+This model was then used to project ecoregions onto future mid-century
+(2041-2070) and end-of-century (2071-2100) climate conditions. Climate
+projections were based on 10-km downscaled climate anomalies (McKenney
+et al. 2011) generated by four widely-used GCMs from the Coupled Model
+Intercomparison Project, Phase 5 (CMIP5, Taylor et al. 2012): CanESM2,
+CESM1-CAM5, HadGEM2-ES, and MIROC-ESM. These particular GCMs were
+selected for downscaling by the Canadian Forest Service based on
+availability of key variables such as solar radiation, wind speed and
+humidity, as well as temperature and precipitation to support various
+forest modeling efforts (McKenney et al., 2013). We used representative
+concentration pathway (RCP) 8.5, to represent the 21st century
+conditions that are to be expected without dramatic reductions in
+greenhouse gas emissions or technological fixes (Fuss et al. 2014).
+
+The following code generates projections for each GCM and time period
+and reprojects the results to an equal-area projection.
+
+\begin{verbatim}
+#fut = directory containing grids representing derived future climate variables
+gcm <- c("canesm2","cesm1cam5","hadgem2es","mirocesm")
+rcp <- c("rcp45","rcp85")
+time <- c("2041-2070","2071-2100")
+for (i in gcm) {
+    for (j in rcp) {
+        for (k in time) {
+            w  <- paste(fut,i,"/",j,"/",k,"/",sep="")
+            setwd(w)
+            futclim <- list.files(w,pattern=".asc$")
+            s <-stack(futclim[1:99])
+            p <- predict(s,eco1.rf)
+            plaz <- round(projectRaster(p,ecolevel3r,method='ngb'),0)
+            writeRaster(plaz, filename=paste(eco,j,k,i,"1",sep="_"),datatype='INT4S',format="GTiff", overwrite=TRUE)
+            }
+        }   
+    }
+\end{verbatim}
+
+Next, I identified the most frequently-predicted Level-III ecoregion
+(Table 1) at each pixel location (i.e, the mode) for RCP 4.5 and RCP
+8.5.
+
+\begin{verbatim}
+groups <- c("rcp45_2041-2070","rcp45_2071-2100","rcp85_2041-2070","rcp85_2071-2100")
+setwd(eco)
+for (i in groups) {
+    g <- list.files(eco,pattern=i)
+    g1 <- grep(pattern=".tif$",g,value=TRUE)
+    gs <- stack(g1)
+    m <- overlay(gs, fun = modal)   
+    futfreq <- as.data.frame(freq(m))
+    names(futfreq)[2] <- i
+    ecolu <- merge(ecolu,futfreq,by.x="level",by.y="value")
+    writeRaster(m, filename=paste(eco,i,"mode",sep="_"),datatype='INT4S',format="GTiff", overwrite=TRUE)
+    }
+ecolu1 <- merge(unique(cececo[,c(2:4)]),ecolu[,2:7],by="NA_L3CODE")
+write.csv(ecolu1,file="ecoregion_change.summary.csv",row.names=FALSE)
+\end{verbatim}
+
+\begin{figure}
+\centering
+\includegraphics{I:/GoogleDrive/COBB_ClimateChange/ACE-ECOResubmission/ecoref/ecoregion_cmip5_RCP45.png}
+\caption{Figure 1. Model-predicted (a) baseline, (b) mid-century, and
+(c) end-of-century changes in North American ecoregions for RCP 4.5.
+Boreal and western forested regions are shown in green and blue-green
+shades; arctic ecoregions are in purple shades; prairie/parkland
+ecoregions are in red-brown shades; and temperate forest ecoregions are
+in light green, yellow, and orange shades (see Table 1 for full list of
+ecoregions). Boreal ecoregions are also outlined in black.}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics{I:/GoogleDrive/COBB_ClimateChange/ACE-ECOResubmission/ecoref/ecoregion_cmip5_RCP85.png}
+\caption{Figure 2. Model-predicted (a) baseline, (b) mid-century, and
+(c) end-of-century changes in North American ecoregions for RCP 8.5.
+Boreal and western forested regions are shown in green and blue-green
+shades; arctic ecoregions are in purple shades; prairie/parkland
+ecoregions are in red-brown shades; and temperate forest ecoregions are
+in light green, yellow, and orange shades (see Table 1 for full list of
+ecoregions). Boreal ecoregions are also outlined in black.}
+\end{figure}
+
+I then calculated the change in area (16 km2 pixels) for each Level III
+ecoregion:
+
+Table 1. Model-projected changes by ecoregion:
+
+\begin{longtable}[]{@{}llrrrrr@{}}
+\toprule
+NA\_L3CODE & NA\_L3NAME & curr & rcp45\_2041.2070 & rcp45\_2071.2100 &
+rcp85\_2041.2070 & rcp85\_2071.2100\tabularnewline
+\midrule
+\endhead
+1.1.2 & Baffin and Torngat Mountains & 5785 & 5197 & 2250 & 1965 &
+393\tabularnewline
+10.1.1 & Thompson-Okanogan Plateau & 3839 & 5693 & 3589 & 3376 &
+2862\tabularnewline
+10.1.2 & Columbia Plateau & 5036 & 5531 & 4827 & 5101 &
+5167\tabularnewline
+10.1.3 & Northern Basin and Range & 9141 & 1445 & 334 & 647 &
+11\tabularnewline
+10.1.4 & Wyoming Basin & 8515 & 1245 & 560 & 448 & 363\tabularnewline
+10.1.5 & Central Basin and Range & 16892 & 15798 & 14737 & 13595 &
+5904\tabularnewline
+10.1.6 & Colorado Plateaus & 8002 & 14825 & 14476 & 14470 &
+15813\tabularnewline
+10.1.7 & Arizona/New Mexico Plateau & 8877 & 12827 & 11906 & 10181 &
+5301\tabularnewline
+10.1.8 & Snake River Plain & 4042 & 5396 & 6074 & 5801 &
+1949\tabularnewline
+10.2.1 & Mojave Basin and Range & 7766 & 10443 & 13446 & 16203 &
+32738\tabularnewline
+10.2.2 & Sonoran Desert & 7208 & 13908 & 16462 & 17540 &
+27624\tabularnewline
+10.2.4 & Chihuahuan Desert & 10202 & 15753 & 14807 & 14405 &
+12389\tabularnewline
+11.1.1 & California Coastal Sage, Chaparral, and Oak Woodlands & 5946 &
+8910 & 10364 & 10810 & 19407\tabularnewline
+11.1.2 & Central California Valley & 3208 & 2566 & 2364 & 2829 &
+1070\tabularnewline
+11.1.3 & Southern and Baja California Pine-Oak Mountains & 1794 & 1249 &
+1059 & 998 & 1014\tabularnewline
+12.1.1 & Madrean Archipelago & 3214 & 4902 & 4809 & 5281 &
+6232\tabularnewline
+13.1.1 & Arizona/New Mexico Mountains & 7069 & 5884 & 6871 & 6695 &
+7784\tabularnewline
+15.4.1 & Southern Florida Coastal Plain & 2542 & 4479 & 5451 & 5394 &
+7981\tabularnewline
+2.1.4 & Lancaster and Borden Peninsula Plateaus & 5018 & 321 & 118 & 152
+& 9\tabularnewline
+2.1.5 & Foxe Uplands & 25575 & 4649 & 4173 & 3141 & 1985\tabularnewline
+2.1.6 & Baffin Uplands & 7702 & 1641 & 919 & 1122 & 984\tabularnewline
+2.1.7 & Gulf of Boothia and Foxe Basin Plains & 11438 & 400 & 128 & 51 &
+75\tabularnewline
+2.1.9 & Banks Island and Amundsen Gulf Lowlands & 11202 & 16289 & 9323 &
+8539 & 68\tabularnewline
+2.2.1 & Arctic Coastal Plain & 4145 & 12223 & 13419 & 13942 &
+2073\tabularnewline
+2.2.2 & Arctic Foothills & 8286 & 37118 & 49520 & 57446 &
+46094\tabularnewline
+2.2.3 & Subarctic Coastal Plains & 6951 & 38956 & 51348 & 55642 &
+96698\tabularnewline
+2.2.4 & Seward Peninsula & 3685 & 14046 & 12792 & 12515 &
+4386\tabularnewline
+2.2.5 & Bristol Bay-Nushagak Lowlands & 4289 & 15780 & 18318 & 17968 &
+23889\tabularnewline
+2.3.1 & Brooks Range/Richardson Mountains & 9438 & 4093 & 2236 & 2351 &
+1008\tabularnewline
+2.4.1 & Amundsen Plains & 19528 & 26123 & 12571 & 5358 &
+3879\tabularnewline
+2.4.2 & Aberdeen Plains & 20284 & 7377 & 6876 & 5852 &
+175\tabularnewline
+2.4.3 & Central Ungava Peninsula and Ottawa and Belcher Islands & 12708
+& 989 & 2019 & 2766 & 2328\tabularnewline
+3.1.1 & Interior Forested Lowlands and Uplands & 12314 & 11610 & 12324 &
+7956 & 1647\tabularnewline
+3.1.2 & Interior Bottomlands & 8480 & 12243 & 12947 & 11485 &
+3740\tabularnewline
+3.3.2 & Hay and Slave River Lowlands & 18066 & 16530 & 18785 & 16477 &
+2894\tabularnewline
+3.4.2 & La Grande Hills and New Quebec Central Plateau & 23362 & 2721 &
+289 & 7 & 687\tabularnewline
+3.4.3 & Smallwood Uplands & 17695 & 3650 & 1900 & 1628 &
+59\tabularnewline
+3.4.5 & Coppermine River and Tazin Lake Uplands & 17076 & 31218 & 27986
+& 32173 & 1788\tabularnewline
+4.1.1 & Coastal Hudson Bay Lowland & 5247 & 6216 & 9476 & 4593 &
+213\tabularnewline
+4.1.2 & Hudson Bay and James Bay Lowlands & 19015 & 7396 & 1772 & 3408 &
+5321\tabularnewline
+5.1.1 & Athabasca Plain and Churchill River Upland & 17427 & 8784 & 9403
+& 7999 & 5953\tabularnewline
+5.1.2 & Lake Nipigon and Lac Seul Upland & 14113 & 7979 & 10656 & 10468
+& 5219\tabularnewline
+5.1.3 & Central Laurentians and Mecatina Plateau & 22320 & 22361 & 19161
+& 19597 & 825\tabularnewline
+5.1.4 & Newfoundland Island & 9737 & 7967 & 7865 & 7326 &
+3273\tabularnewline
+5.1.5 & Hayes River Upland and Big Trout Lake & 16227 & 10627 & 11089 &
+13205 & 1022\tabularnewline
+5.1.6 & Abitibi Plains and Riviere Rupert Plateau & 18020 & 9554 & 5260
+& 5975 & 1\tabularnewline
+5.2.1 & Northern Lakes and Forests & 19174 & 34982 & 36572 & 39567 &
+42851\tabularnewline
+5.2.2 & Northern Minnesota Wetlands & 2774 & 36 & 176 & 17 &
+2\tabularnewline
+5.2.3 & Algonquin/Southern Laurentians & 19758 & 19809 & 13374 & 14844 &
+4684\tabularnewline
+5.3.1 & Northern Appalachian and Atlantic Maritime Highlands & 13784 &
+22199 & 21696 & 21793 & 14885\tabularnewline
+5.4.1 & Mid-Boreal Uplands and Peace-Wabaska Lowlands & 26281 & 13199 &
+7792 & 9977 & 2322\tabularnewline
+5.4.2 & Clear Hills and Western Alberta Upland & 8944 & 987 & 610 & 824
+& 114\tabularnewline
+5.4.3 & Mid-Boreal Lowland and Interlake Plain & 8591 & 21433 & 22801 &
+23930 & 17692\tabularnewline
+6.1.1 & Interior Highlands and Klondike Plateau & 9208 & 3124 & 2530 &
+1914 & 106\tabularnewline
+6.1.2 & Alaska Range & 6968 & 3714 & 2627 & 2487 & 971\tabularnewline
+6.1.4 & Wrangell and St.~Elias Mountains & 2554 & 1378 & 1049 & 831 &
+10\tabularnewline
+6.1.5 & Watson Highlands & 13655 & 10757 & 7553 & 6807 &
+162\tabularnewline
+6.1.6 & Yukon-Stikine Highlands/Boreal Mountains and Plateaus & 10586 &
+5786 & 3741 & 3753 & 353\tabularnewline
+6.2.1 & Skeena-Omineca-Central Canadian Rocky Mountains & 9171 & 8552 &
+8820 & 9990 & 2291\tabularnewline
+6.2.10 & Middle Rockies & 10794 & 6030 & 3226 & 2347 &
+410\tabularnewline
+6.2.11 & Klamath Mountains & 3253 & 3694 & 3332 & 3254 &
+2232\tabularnewline
+6.2.12 & Sierra Nevada & 3604 & 3118 & 3606 & 3832 & 2868\tabularnewline
+6.2.13 & Wasatch and Uinta Mountains & 4243 & 813 & 238 & 623 &
+63\tabularnewline
+6.2.14 & Southern Rockies & 9092 & 7227 & 6959 & 6111 &
+3052\tabularnewline
+6.2.15 & Idaho Batholith & 3999 & 3728 & 3623 & 3928 &
+2089\tabularnewline
+6.2.2 & Chilcotin Ranges and Fraser Plateau & 6500 & 1795 & 1049 & 1413
+& 84\tabularnewline
+6.2.3 & Columbia Mountains/Northern Rockies & 11119 & 22325 & 24278 &
+24061 & 22864\tabularnewline
+6.2.4 & Canadian Rockies & 6511 & 1408 & 919 & 661 & 61\tabularnewline
+6.2.5 & North Cascades & 2717 & 3194 & 3353 & 2192 & 1064\tabularnewline
+6.2.6 & Cypress Upland & 837 & 556 & 282 & 395 & 885\tabularnewline
+6.2.7 & Cascades & 2859 & 2817 & 3091 & 3011 & 3540\tabularnewline
+6.2.8 & Eastern Cascades Slopes and Foothills & 3449 & 1616 & 861 & 741
+& 200\tabularnewline
+6.2.9 & Blue Mountains & 4304 & 6120 & 6600 & 6467 & 3588\tabularnewline
+7.1.1 & Ahklun and Kilbuck Mountains & 3741 & 5592 & 9927 & 8813 &
+9255\tabularnewline
+7.1.2 & Alaska Peninsula Mountains & 4630 & 2073 & 1724 & 1409 &
+1309\tabularnewline
+7.1.3 & Cook Inlet & 2343 & 7889 & 6718 & 5350 & 2189\tabularnewline
+7.1.4 & Pacific Coastal Mountains & 8158 & 5032 & 3887 & 3482 &
+1811\tabularnewline
+7.1.5 & Coastal Western Hemlock-Sitka Spruce Forests & 10176 & 13692 &
+12519 & 12684 & 4999\tabularnewline
+7.1.6 & Pacific and Nass Ranges & 7173 & 8014 & 7731 & 9747 &
+3648\tabularnewline
+7.1.7 & Strait of Georgia/Puget Lowland & 3380 & 3809 & 4980 & 5047 &
+12675\tabularnewline
+7.1.8 & Coast Range & 3878 & 3847 & 3489 & 3851 & 3272\tabularnewline
+7.1.9 & Willamette Valley & 1129 & 2525 & 3088 & 2721 &
+3538\tabularnewline
+8.1.1 & Eastern Great Lakes Lowlands & 10611 & 27854 & 39218 & 39742 &
+58844\tabularnewline
+8.1.10 & Erie Drift Plain & 2274 & 307 & 62 & 6 & 54\tabularnewline
+8.1.2 & Lake Erie Lowland & 4095 & 890 & 1202 & 1076 &
+937\tabularnewline
+8.1.3 & Northern Allegheny Plateau & 3060 & 36 & 2 & 4 &
+130\tabularnewline
+8.1.4 & North Central Hardwood Forests & 6153 & 7501 & 12214 & 11052 &
+6399\tabularnewline
+8.1.6 & Southern Michigan/Northern Indiana Drift Plains & 4974 & 1858 &
+404 & 229 & 281\tabularnewline
+8.1.7 & Northeastern Coastal Zone & 3483 & 16109 & 16031 & 17106 &
+9656\tabularnewline
+8.1.8 & Acadian Plains and Hills & 6882 & 1089 & 364 & 793 &
+797\tabularnewline
+8.1.9 & Maritime Lowlands & 3379 & 564 & 4 & 15 & 706\tabularnewline
+8.2.1 & Southeastern Wisconsin Till Plains & 2639 & 1175 & 973 & 1252 &
+6440\tabularnewline
+8.2.2 & Huron/Erie Lake Plains & 3393 & 4880 & 5070 & 3660 &
+4186\tabularnewline
+8.2.3 & Central Corn Belt Plains & 5253 & 1871 & 1709 & 2247 &
+4536\tabularnewline
+8.2.4 & Eastern Corn Belt Plains & 5195 & 8044 & 6701 & 5080 &
+614\tabularnewline
+8.3.1 & Northern Piedmont & 2266 & 2042 & 2428 & 875 &
+220\tabularnewline
+8.3.2 & Interior River Valleys and Hills & 7204 & 18471 & 22834 & 32181
+& 41053\tabularnewline
+8.3.3 & Interior Plateau & 7863 & 4882 & 4497 & 3481 &
+1847\tabularnewline
+8.3.4 & Piedmont & 10363 & 2622 & 1337 & 895 & 173\tabularnewline
+8.3.5 & Southeastern Plains & 15521 & 9623 & 12471 & 8427 &
+3111\tabularnewline
+8.3.6 & Mississippi Valley Loess Plains & 4937 & 811 & 522 & 1506 &
+1092\tabularnewline
+8.3.7 & South Central Plains & 9328 & 20114 & 18219 & 24925 &
+36606\tabularnewline
+8.3.8 & East Central Texas Plains & 3242 & 8719 & 9141 & 10183 &
+11699\tabularnewline
+8.4.1 & Ridge and Valley & 5920 & 904 & 578 & 203 & 422\tabularnewline
+8.4.2 & Central Appalachians & 4867 & 832 & 448 & 138 &
+119\tabularnewline
+8.4.3 & Western Allegheny Plateau & 4778 & 947 & 617 & 703 &
+13\tabularnewline
+8.4.4 & Blue Ridge & 3021 & 1863 & 2013 & 2268 & 7292\tabularnewline
+8.4.5 & Ozark Highlands & 6249 & 8596 & 4947 & 5703 &
+5052\tabularnewline
+8.4.6 & Boston Mountains & 1336 & 310 & 668 & 292 & 230\tabularnewline
+8.4.7 & Arkansas Valley & 1969 & 3349 & 3055 & 2012 & 659\tabularnewline
+8.4.8 & Ouachita Mountains & 1619 & 2407 & 1589 & 1016 &
+710\tabularnewline
+8.4.9 & Southwestern Appalachians & 3253 & 312 & 274 & 230 &
+523\tabularnewline
+8.5.1 & Middle Atlantic Coastal Plain & 7953 & 4024 & 7165 & 1763 &
+5204\tabularnewline
+8.5.2 & Mississippi Alluvial Plain & 8327 & 28746 & 33976 & 31813 &
+33331\tabularnewline
+8.5.3 & Southern Coastal Plain & 10023 & 14455 & 12420 & 11986 &
+12766\tabularnewline
+8.5.4 & Atlantic Coastal Pine Barrens & 1540 & 6493 & 9429 & 7146 &
+10878\tabularnewline
+9.2.1 & Aspen Parkland/Northern Glaciated Plains & 19219 & 43285 & 40756
+& 47938 & 53002\tabularnewline
+9.2.2 & Lake Manitoba and Lake Agassiz Plain & 7004 & 31809 & 43943 &
+43028 & 71014\tabularnewline
+9.2.3 & Western Corn Belt Plains & 13086 & 15829 & 14529 & 15256 &
+36825\tabularnewline
+9.2.4 & Central Irregular Plains & 7590 & 12209 & 7936 & 12002 &
+2564\tabularnewline
+9.3.1 & Northwestern Glaciated Plains & 22953 & 15444 & 13530 & 12853 &
+23046\tabularnewline
+9.3.3 & Northwestern Great Plains & 22220 & 26844 & 24463 & 22722 &
+4034\tabularnewline
+9.3.4 & Nebraska Sand Hills & 5161 & 281 & 272 & 251 & 40\tabularnewline
+9.4.1 & High Plains & 17009 & 25323 & 27925 & 26333 &
+13500\tabularnewline
+9.4.2 & Central Great Plains & 14563 & 39122 & 52642 & 46814 &
+122654\tabularnewline
+9.4.3 & Southwestern Tablelands & 12148 & 19747 & 18592 & 20378 &
+21736\tabularnewline
+9.4.4 & Flint Hills & 2576 & 46 & 33 & 5 & 79\tabularnewline
+9.4.5 & Cross Timbers & 5772 & 10147 & 11004 & 10631 &
+26257\tabularnewline
+9.4.6 & Edwards Plateau & 5712 & 155 & 44 & 39 & 14\tabularnewline
+9.4.7 & Texas Blackland Prairies & 3141 & 1303 & 1032 & 1451 &
+4601\tabularnewline
+9.5.1 & Western Gulf Coastal Plain & 5505 & 14913 & 20089 & 20010 &
+39523\tabularnewline
+9.6.1 & Southern Texas Plains/Interior Plains and Hills with Xerophytic
+Shrub and Oak Forest & 2942 & 13180 & 15724 & 17877 &
+25204\tabularnewline
+\bottomrule
+\end{longtable}
+
+I also specifically summarized changes for boreal ecoregions (5.4, 5.1,
+3.4, 3.3, 3.2, 3.1, and 6.1):
+
+Table 2. Model-projected changes by boreal ecoregion:
+
+\begin{longtable}[]{@{}llrrrrr@{}}
+\toprule
+NA\_L3CODE & NA\_L3NAME & curr & rcp45\_2041.2070 & rcp45\_2071.2100 &
+rcp85\_2041.2070 & rcp85\_2071.2100\tabularnewline
+\midrule
+\endhead
+3.1.1 & Interior Forested Lowlands and Uplands & 12314 & 11610 & 12324 &
+7956 & 1647\tabularnewline
+3.1.2 & Interior Bottomlands & 8480 & 12243 & 12947 & 11485 &
+3740\tabularnewline
+3.3.2 & Hay and Slave River Lowlands & 18066 & 16530 & 18785 & 16477 &
+2894\tabularnewline
+3.4.2 & La Grande Hills and New Quebec Central Plateau & 23362 & 2721 &
+289 & 7 & 687\tabularnewline
+3.4.3 & Smallwood Uplands & 17695 & 3650 & 1900 & 1628 &
+59\tabularnewline
+3.4.5 & Coppermine River and Tazin Lake Uplands & 17076 & 31218 & 27986
+& 32173 & 1788\tabularnewline
+5.1.1 & Athabasca Plain and Churchill River Upland & 17427 & 8784 & 9403
+& 7999 & 5953\tabularnewline
+5.1.2 & Lake Nipigon and Lac Seul Upland & 14113 & 7979 & 10656 & 10468
+& 5219\tabularnewline
+5.1.3 & Central Laurentians and Mecatina Plateau & 22320 & 22361 & 19161
+& 19597 & 825\tabularnewline
+5.1.4 & Newfoundland Island & 9737 & 7967 & 7865 & 7326 &
+3273\tabularnewline
+5.1.5 & Hayes River Upland and Big Trout Lake & 16227 & 10627 & 11089 &
+13205 & 1022\tabularnewline
+5.1.6 & Abitibi Plains and Riviere Rupert Plateau & 18020 & 9554 & 5260
+& 5975 & 1\tabularnewline
+5.4.1 & Mid-Boreal Uplands and Peace-Wabaska Lowlands & 26281 & 13199 &
+7792 & 9977 & 2322\tabularnewline
+5.4.2 & Clear Hills and Western Alberta Upland & 8944 & 987 & 610 & 824
+& 114\tabularnewline
+5.4.3 & Mid-Boreal Lowland and Interlake Plain & 8591 & 21433 & 22801 &
+23930 & 17692\tabularnewline
+6.1.1 & Interior Highlands and Klondike Plateau & 9208 & 3124 & 2530 &
+1914 & 106\tabularnewline
+6.1.2 & Alaska Range & 6968 & 3714 & 2627 & 2487 & 971\tabularnewline
+6.1.4 & Wrangell and St.~Elias Mountains & 2554 & 1378 & 1049 & 831 &
+10\tabularnewline
+6.1.5 & Watson Highlands & 13655 & 10757 & 7553 & 6807 &
+162\tabularnewline
+6.1.6 & Yukon-Stikine Highlands/Boreal Mountains and Plateaus & 10586 &
+5786 & 3741 & 3753 & 353\tabularnewline
+\bottomrule
+\end{longtable}
+
+This translates into 34\% and 83\% losses of boreal climate space by
+2041-2070 and 2071-2100, respectively, based on RCP 8.5; or 27\% and
+34\% losses based on RCP 4.5
+
+\textbf{References}
+
+Breiman, L. 2001. Random Forests. Machine Learning 45:5-32.
+
+Commission for Environmental Cooperation. 1997. Ecological Regions of
+North America: Toward a Common Perspective, Montreal, Canada.
+
+Fuss, S., J. G. Canadell, G. P. Peters, M. Tavoni, R. M. Andrew, P.
+Ciais, R. B. Jackson, C. D. Jones, F. Kraxner, N. Nakicenovic, C. Le
+Quere, M. R. Raupach, A. Sharifi, P. Smith, and Y. Yamagata. 2014.
+Betting on negative emissions. Nature Climate Change 4:850-853.
+
+McKenney, D., J. Pedlar, M. Hutchinson, P. Papadopol, K. Lawrence, K.
+Campbell, E. Milewska, R. F. Hopkinson, and D. Price. 2013. Spatial
+climate models for Canada's forestry community. The Forestry Chronicle
+89:659-663.
+
+Rehfeldt, G. E., N. L. Crookston, C. Sáenz-Romero, and E. M. Campbell.
+2012. North American vegetation model for land-use planning in a
+changing climate: a solution to large classification problems.
+Ecological Applications 22:119-141.
+
+Taylor, K. E., R. J. Stouffer, and G. A. Meehl. 2012. An Overview of
+CMIP5 and the Experiment Design. Bulletin of the American Meteorological
+Society 93:485-498.
+
+
+\end{document}
